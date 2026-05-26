@@ -36,141 +36,134 @@ def tile(input: Tensor, kernel: Tuple[int, int]) -> Tuple[Tensor, int, int]:
     assert height % kh == 0
     assert width % kw == 0
     # TODO: Implement for Task 4.3.
-
-    # Compute the new dimensions
+    # Ensure the input tensor is contiguous
+    if not input._tensor.is_contiguous():
+        input = input.contiguous()
+    # Compute the new height and width
     new_height = height // kh
     new_width = width // kw
 
-    input = input.contiguous()
+    # Reshape the input tensor
+    reshaped = input.view(batch, channel, new_height, kh, new_width, kw)
 
-    # Reshape the input tensor for tiling
-    tiled = (
-        input.view(batch, channel, new_height, kh, new_width, kw)
-        # Rearrange dimensions to group the kernel region
-        .permute(0, 1, 2, 4, 3, 5)
-        # Flatten the kernel region
-        .contiguous()
-        .view(batch, channel, new_height, new_width, kh * kw)
-    )
+    # Move the kernel dimensions to the last axis
+    tiled = reshaped.permute(0, 1, 2, 4, 3, 5).contiguous()
+
+    # Flatten the kernel dimensions into a single axis
+    tiled = tiled.view(batch, channel, new_height, new_width, kh * kw)
+
     return tiled, new_height, new_width
+
+
+# TODO: Implement for Task 4.3.
+def avgpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
+    """Perform tiled average pooling on a 2D tensor."""
+    tiled, new_height, new_width = tile(input, kernel)
+    pooled = tiled.mean(dim=-1)
+    return pooled.view(input.shape[0], input.shape[1], new_height, new_width)
 
 
 max_reduce = FastOps.reduce(operators.max, -1e9)
 
 
-# TODO: Implement for Task 4.3.
-def avgpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
-    """Apply average pooling on the input tensor.
-
-    Args:
-    ----
-        input: Tensor of size batch x channel x height x width
-        kernel: Tuple of pooling kernel size (height, width)
-
-    Returns:
-    -------
-        Tensor of size batch x channel x new_height x new_width
-
-    """
-    tiled, new_height, new_width = tile(input, kernel)
-    return tiled.mean(-1).view(input.shape[0], input.shape[1], new_height, new_width)
-
-
-def argmax(input: Tensor, dim: Tensor) -> Tensor:
-    """Compute the argmax as a 1-hot tensor along a specified dimension."""
-    return input == max_reduce(input, int(dim.item()))
+def argmax(input: Tensor, dim: int) -> Tensor:  ### used in the backward function of Max
+    """Compute the argmax along a given dimension as a 1-hot tensor."""
+    out = max_reduce(input, dim)
+    return out == input
 
 
 class Max(Function):
-    """Custom Function for max operator with autograd support."""
+    """Max Function for backpropagation."""
 
     @staticmethod
     def forward(ctx: Context, input: Tensor, dim: Tensor) -> Tensor:
-        """Forward pass for the Max function.
+        """Compute the forward pass for the Max function.
 
         Args:
         ----
-            ctx: The context object to save information for backward pass.
-            input: Input tensor for which to compute the max.
-            dim: Dimension along which to compute the max.
+            ctx : Context
+                The context object to save values for backpropagation.
+            input : Tensor
+                The input tensor on which to apply the max operation.
+            dim : Tensor
+                The dimension along which to compute the max.
 
         Returns:
         -------
-            Tensor containing the max values along the specified dimension.
+            Tensor: The result of applying the Max function.
 
         """
-        ctx.save_for_backward(input, dim)
-        return max_reduce(input, int(dim.item()))
+        dimInt = int(dim[0])
+        ctx.save_for_backward(input, dimInt)
+        return max_reduce(input, dimInt)
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, float]:
-        """Backward pass for the Max function.
+        """Compute the backward pass for the Max function.
 
         Args:
         ----
-            ctx: The context object containing saved values from the forward pass.
-            grad_output: Gradient of the loss with respect to the output of the Max function.
+            ctx : Context
+                The context object containing saved values for backpropagation.
+            grad_output : Tensor
+                The gradient of the output tensor from the forward pass.
 
         Returns:
         -------
-            Tuple of gradients with respect to the input tensor and the dimension.
+            Tuple[Tensor, float]
+                The gradient with respect to the input tensor and a placeholder (0.0).
 
         """
-        input, dim = ctx.saved_values
-        return (argmax(input, dim)) * grad_output, dim
+        input, dimInt = ctx.saved_values
+        return (grad_output * argmax(input, dimInt), 0.0)
 
 
 def max(input: Tensor, dim: int) -> Tensor:
-    """Compute the max value and indices along a given dimension."""
+    """Apply the Max function to the input tensor along the specified dimension.
+
+    Args:
+    ----
+        input : Tensor
+            The input tensor on which to apply the max operation.
+        dim : int
+            The dimension along which to compute the max.
+
+    Returns:
+    -------
+        Tensor: The result of applying the Max function.
+
+    """
     return Max.apply(input, input._ensure_tensor(dim))
 
 
 def softmax(input: Tensor, dim: int) -> Tensor:
-    """Compute the softmax as a tensor."""
-    a = input.exp()
-    return a / a.sum(dim=dim)
+    """Compute the softmax along a given dimension."""
+    input = input.exp()
+    t = input.sum(dim)
+    input = input / t
+    return input
 
 
 def logsoftmax(input: Tensor, dim: int) -> Tensor:
-    """Compute the log of the softmax as a tensor."""
-    max_vals = max(input, dim)
-    logsumexp = (input - max_vals).exp().sum(dim).log()
-    return input - max_vals - logsumexp
+    """Compute the log softmax using the log-sum-exp trick."""
+    t = input.exp()
+    t = t.sum(dim)
+    t = t.log()
+    return input - t
 
 
 def maxpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
-    """Apply max pooling on the input tensor.
-
-    Args:
-    ----
-        input: Tensor of size batch x channel x height x width
-        kernel: Tuple of pooling kernel size (height, width)
-
-    Returns:
-    -------
-        Tensor of size batch x channel x new_height x new_width
-
-    """
-    # Reshape the input tensor for pooling
-    tiled, new_height, new_width = tile(input, kernel)
-
-    # Use max_reduce to compute the max over the kernel region
-    max_pooled = max_reduce(tiled, -1)
-
-    # Reshape the result to match the pooled dimensions
-    return max_pooled.view(input.shape[0], input.shape[1], new_height, new_width)
+    """Perform tiled max pooling on a 2D tensor."""
+    batch, channel, height, width = input.shape
+    input, tile_h, tile_w = tile(input, kernel)
+    input = max(input, 4)
+    input = input.view(batch, channel, tile_h, tile_w)
+    return input
 
 
 def dropout(input: Tensor, rate: float, ignore: bool = False) -> Tensor:
-    """Apply dropout only if input is a Tensor."""
-    if ignore or rate <= 0.0:
-        # If ignore is True or rate is 0, return the input unchanged
-        return input
-    if rate >= 1.0:
-        # If rate is 1, all values are dropped (result is zero tensor)
-        return input * 0
-
-    # Generate random noise and create a binary mask
-    mask = rand(input.shape) > rate
-    # Apply the mask and scale the output to maintain expected value
-    return input * mask / (1 - rate)
+    """Apply dropout based on random noise."""
+    if not ignore:
+        bit_tensor = rand(input.shape, input.backend) > rate
+        input = bit_tensor * input
+    return input

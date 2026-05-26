@@ -67,9 +67,7 @@ def to_index(ordinal: int, shape: Shape, out_index: OutIndex) -> None:
 
     """
     # TODO: Implement for Task 2.1.
-    # total_size = int(prod(shape))
     cur_ord = ordinal + 0
-
     for i in range(len(shape) - 1, -1, -1):
         sh = shape[i]
         out_index[i] = int(cur_ord % sh)
@@ -80,14 +78,45 @@ def broadcast_index(
     big_index: Index, big_shape: Shape, shape: Shape, out_index: OutIndex
 ) -> None:
     """Convert a `big_index` into `big_shape` to a smaller `out_index`
-    into `shape` following broadcasting rules.
+    into `shape` following broadcasting rules. In this case
+    it may be larger or with more dimensions than the `shape`
+    given. Additional dimensions may need to be mapped to 0 or
+    removed.
+
+    Args:
+    ----
+        big_index : multidimensional index of bigger tensor
+        big_shape : tensor shape of bigger tensor
+        shape : tensor shape of smaller tensor
+        out_index : multidimensional index of smaller tensor
+
+    Returns:
+    -------
+        None
+
     """
-    # TODO: Implement for Task 2.1.
-    for i in range(len(shape)):
-        if shape[i] > 1:
-            out_index[i] = big_index[i + len(big_shape) - len(shape)]
+    # TODO: Implement for Task 2.2.
+    # # Ensure the smaller tensor shape can broadcast to the bigger tensor shape
+    # assert len(big_shape) >= len(
+    #     shape
+    # ), "The smaller shape cannot have more dimensions than the bigger shape."
+    # # Difference in the number of dimensions between the big and small shape
+    # dim_offset = len(big_shape) - len(shape)
+    # # Iterate over the smaller tensor's dimensions and map to the corresponding big tensor dimensions
+    # for i in range(len(shape)):
+    #     if shape[i] == 1:
+    #         # If the dimension in the smaller shape is 1, broadcast it by setting index to 0
+    #         out_index[i] = 0
+    #     else:
+    #         # Otherwise, just copy the index from the corresponding dimension in the big_index
+    #         out_index[i] = big_index[i + dim_offset]
+
+    for i, s in enumerate(shape):
+        if s > 1:
+            out_index[i] = big_index[i + (len(big_shape) - len(shape))]
         else:
-            out_index[i] = 0  # Broadcast dimensions of size 1
+            out_index[i] = 0
+    return None
 
 
 def shape_broadcast(shape1: UserShape, shape2: UserShape) -> UserShape:
@@ -108,23 +137,27 @@ def shape_broadcast(shape1: UserShape, shape2: UserShape) -> UserShape:
 
     """
     # TODO: Implement for Task 2.2.
-    a, b = shape1, shape2
-    m = max(len(a), len(b))
-    c_rev = [0] * m
-    a_rev = list(reversed(a))
-    b_rev = list(reversed(b))
-    for i in range(m):
-        if i >= len(a):
-            c_rev[i] = b_rev[i]
-        elif i >= len(b):
-            c_rev[i] = a_rev[i]
+    # Reverse both shapes to align the dimensions from the right
+    shape1 = list(shape1[::-1])
+    shape2 = list(shape2[::-1])
+    # Initialize an empty list to hold the result shape
+    broadcasted_shape = []
+    # Iterate over the dimensions, up to the length of the longer shape
+    for i in range(max(len(shape1), len(shape2))):
+        # Get the dimensions at position i, or use 1 if out of bounds
+        dim1 = shape1[i] if i < len(shape1) else 1
+        dim2 = shape2[i] if i < len(shape2) else 1
+        # Check if the dimensions are compatible
+        if dim1 == dim2 or dim1 == 1 or dim2 == 1:
+            # Append the larger of the two dimensions to the result shape
+            broadcasted_shape.append(max(dim1, dim2))
         else:
-            c_rev[i] = max(a_rev[i], b_rev[i])
-            if a_rev[i] != c_rev[i] and a_rev[i] != 1:
-                raise IndexingError(f"Broadcast fatlure {a} {b}")
-            if b_rev[i] != c_rev[i] and b_rev[i] != 1:
-                raise IndexingError(f"Broadcast failure {a} {b}")
-    return tuple(reversed(c_rev))
+            # If the dimensions are incompatible, raise an error
+            raise IndexingError(
+                f"Cannot broadcast shapes {shape1[::-1]} and {shape2[::-1]}"
+            )
+    # Return the broadcasted shape, reversing it back to the correct order
+    return tuple(broadcasted_shape[::-1])
 
 
 def strides_from_shape(shape: UserShape) -> UserStrides:
@@ -193,32 +226,11 @@ class TensorData:
 
     @staticmethod
     def shape_broadcast(shape_a: UserShape, shape_b: UserShape) -> UserShape:
-        """Broadcast two shapes to create a new union shape.
-
-        Args:
-        ----
-            shape_a : first shape
-            shape_b : second shape
-
-        Returns:
-        -------
-            broadcasted shape
-
-        """
+        """Broadcasts two shapes together and returns the resulting shape."""
         return shape_broadcast(shape_a, shape_b)
 
     def index(self, index: Union[int, UserIndex]) -> int:
-        """Retrieve the position in the tensor for the given index.
-
-        Args:
-        ----
-            index: An integer or a sequence of integers representing the index.
-
-        Returns:
-        -------
-            The corresponding position in the tensor storage.
-
-        """
+        """Returns the index of the given key or integer."""
         if isinstance(index, int):
             aindex: Index = array([index])
         else:  # if isinstance(index, tuple):
@@ -242,13 +254,7 @@ class TensorData:
         return index_to_position(array(index), self._strides)
 
     def indices(self) -> Iterable[UserIndex]:
-        """Generate all valid indices for the tensor.
-
-        Yields
-        ------
-            UserIndex: A tuple representing a valid index in the tensor.
-
-        """
+        """Returns an iterable of user indices based on the current shape."""
         lshape: Shape = array(self.shape)
         out_index: Index = array(self.shape)
         for i in range(self.size):
@@ -260,33 +266,12 @@ class TensorData:
         return tuple((random.randint(0, s - 1) for s in self.shape))
 
     def get(self, key: UserIndex) -> float:
-        """Retrieve the value at the specified index.
-
-        Args:
-        ----
-            key: The index to access the value in the tensor.
-
-        Returns:
-        -------
-            The value at the specified index.
-
-        """
+        """Retrieves the value associated with the given key from storage."""
         x: float = self._storage[self.index(key)]
         return x
 
     def set(self, key: UserIndex, val: float) -> None:
-        """Set the value at the specified index.
-
-        Args:
-        ----
-            key: The index to access the value in the tensor.
-            val: The value to set at the specified index.
-
-        Returns:
-        -------
-            None
-
-        """
+        """Sets the value for the given key in storage."""
         self._storage[self.index(key)] = val
 
     def tuple(self) -> Tuple[Storage, Shape, Strides]:
@@ -310,11 +295,11 @@ class TensorData:
         ), f"Must give a position to each dimension. Shape: {self.shape} Order: {order}"
 
         # TODO: Implement for Task 2.1.
-        # Create new shape and strides based on the order
+        # Reorder the shape according to the provided order
         new_shape = tuple(self.shape[i] for i in order)
-        new_strides = tuple(self._strides[i] for i in order)
-
-        # Return a new TensorData instance with the permuted shape and strides
+        # Reorder the strides according to the provided order
+        new_strides = tuple(self.strides[i] for i in order)
+        # Return a new TensorData with the permuted shape and strides, but the same storage
         return TensorData(self._storage, new_shape, new_strides)
 
     def to_string(self) -> str:

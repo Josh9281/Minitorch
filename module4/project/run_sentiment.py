@@ -1,3 +1,7 @@
+from pathlib import Path
+import sys
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 import random
 
 import embeddings
@@ -8,19 +12,46 @@ from datasets import load_dataset
 BACKEND = minitorch.TensorBackend(minitorch.FastOps)
 
 
-def RParam(*shape):
+def RParam(*shape: int) -> minitorch.Parameter:
+    """Create a random parameter tensor with given shape for network initialization.
+
+    Args:
+        shape (tuple): shape of the tensor.
+
+    Returns:
+        minitorch.Parameter: initialized parameter.
+
+    """
     r = 0.1 * (minitorch.rand(shape, backend=BACKEND) - 0.5)
     return minitorch.Parameter(r)
 
 
 class Linear(minitorch.Module):
-    def __init__(self, in_size, out_size):
+    """Linear module for creating a linear transformation with weights and biases."""
+
+    def __init__(self, in_size: int, out_size: int) -> None:
+        """Initialize weights and biases.
+
+        Args:
+            in_size (int): size of each input sample.
+            out_size (int): size of each output sample.
+
+        """
         super().__init__()
         self.weights = RParam(in_size, out_size)
         self.bias = RParam(out_size)
         self.out_size = out_size
 
-    def forward(self, x):
+    def forward(self, x: minitorch.Tensor) -> minitorch.Tensor:
+        """Forward pass for the linear transformation.
+
+        Args:
+            x (Tensor): input tensor.
+
+        Returns:
+            Tensor: output tensor after applying linear transformation.
+
+        """
         batch, in_size = x.shape
         return (
             x.view(batch, in_size) @ self.weights.value.view(in_size, self.out_size)
@@ -28,19 +59,38 @@ class Linear(minitorch.Module):
 
 
 class Conv1d(minitorch.Module):
-    def __init__(self, in_channels, out_channels, kernel_width):
+    """1D Convolution module for creating a convolutional layer."""
+
+    def __init__(self, in_channels: int, out_channels: int, kernel_width: int) -> None:
+        """Initialize weights and biases for 1D convolution.
+
+        Args:
+            in_channels (int): number of channels in the input signal.
+            out_channels (int): number of channels produced by the convolution.
+            kernel_width (int): size of the convolving kernel.
+
+        """
         super().__init__()
         self.weights = RParam(out_channels, in_channels, kernel_width)
         self.bias = RParam(1, out_channels, 1)
 
-    def forward(self, input):
+    def forward(self, input: minitorch.Tensor) -> minitorch.Tensor:
+        """Forward pass for 1D convolution.
+
+        Args:
+            input (Tensor): input tensor.
+
+        Returns:
+            Tensor: output tensor after applying 1D convolution.
+
+        """
         # TODO: Implement for Task 4.5.
-        return minitorch.conv1d(input, self.weights.value) + self.bias.value
+        out = minitorch.conv1d(input, self.weights.value) + self.bias.value
+        return out
 
 
 class CNNSentimentKim(minitorch.Module):
-    """
-    Implement a CNN for Sentiment classification based on Y. Kim 2014.
+    """Implement a CNN for Sentiment classification based on Y. Kim 2014.
 
     This model should implement the following procedure:
 
@@ -54,64 +104,57 @@ class CNNSentimentKim(minitorch.Module):
 
     def __init__(
         self,
-        feature_map_size=100,
-        embedding_size=50,
-        filter_sizes=[3, 4, 5],
-        dropout=0.25,
+        feature_map_size: int = 100,
+        embedding_size: int = 50,
+        filter_sizes: list[int] = [3, 4, 5],
+        dropout: float = 0.25
     ):
+        """Initializes the CNN with specified sizes and dropout rate.
+
+        Args:
+            feature_map_size (int): number of output channels in each convolution.
+            embedding_size (int): dimensionality of input embeddings.
+            filter_sizes (list of int): sizes of the convolutional filters.
+            dropout (float): dropout rate for regularization.
+
+        """
         super().__init__()
         self.feature_map_size = feature_map_size
         # TODO: Implement for Task 4.5.
-        self.embedding_size = embedding_size
-        self.filter_sizes = filter_sizes
-        self.dropout_rate = dropout
+        self.conv1 = Conv1d(embedding_size, feature_map_size, filter_sizes[0])
+        self.conv2 = Conv1d(embedding_size, feature_map_size, filter_sizes[1])
+        self.conv3 = Conv1d(embedding_size, feature_map_size, filter_sizes[2])
+        self.linear = Linear(feature_map_size, 1)
+        self.dropout = dropout
 
-
-        # Create convolution layers for each filter size (3, 4, 5)
-        self.conv1 = Conv1d(in_channels=self.embedding_size, out_channels=self.feature_map_size, kernel_width=filter_sizes[0])
-        self.conv2 = Conv1d(in_channels=self.embedding_size, out_channels=self.feature_map_size, kernel_width=filter_sizes[1])
-        self.conv3 = Conv1d(in_channels=self.embedding_size, out_channels=self.feature_map_size, kernel_width=filter_sizes[2])
-
-
-        # Linear layer to map features to the output classes
-        self.fc = Linear(feature_map_size, 1)
-
-    def forward(self, embeddings):
-        """
-        embeddings tensor: [batch x sentence length x embedding dim]
-        """
+    def forward(self, embeddings: list[list[float]]) -> list[float]:
+        """Embeddings tensor: [batch x sentence length x embedding dim]"""
         # TODO: Implement for Task 4.5.
-        batch_size, sentence_length, embedding_dim = embeddings.shape
-
-        # Permute embeddings for Conv1d: [batch x embedding_dim x sentence_length]
-        embeddings = embeddings.permute(0, 2, 1)
-
-        # Step 1: Apply convolutions followed by ReLU activation
-        conv_out1 = self.conv1.forward(embeddings).relu()
-        conv_out2 = self.conv2.forward(embeddings).relu()
-        conv_out3 = self.conv3.forward(embeddings).relu()
-
-        # Step 2: Apply max-over-time pooling
-        pooled_feature1 = minitorch.nn.max(conv_out1, dim=2)
-        pooled_feature2 = minitorch.nn.max(conv_out2, dim=2)
-        pooled_feature3 = minitorch.nn.max(conv_out3, dim=2)
-
-
-        # Step 3: Sum the pooled features from different filter sizes
-        summed_features = (pooled_feature1 + pooled_feature2 + pooled_feature3)
-
-        # Step 4: Apply a fully connected layer with ReLU and Dropout
-        x = self.fc(summed_features.view(summed_features.shape[0], summed_features.shape[1]))
-
-        # Step 5: Apply dropout and sigmoid activation
-        if self.training:
-            x = minitorch.nn.dropout(x, self.dropout_rate)
-
-        return x.sigmoid().view(embeddings.shape[0])
+        # permute embedding dim to input channels dim for conv layer
+        x = embeddings.permute(0, 2, 1)
+        x1 = self.conv1(x).relu()
+        x2 = self.conv2(x).relu()
+        x3 = self.conv3(x).relu()
+        # Max over each feature map
+        x = minitorch.max(x1, 2) + minitorch.max(x2, 2) + minitorch.max(x3, 2)
+        x = self.linear(x.view(x.shape[0], self.feature_map_size))
+        x = minitorch.dropout(x, self.dropout, self.mode == "eval") # when in evaluation mode, dropout is typically not applied
+        # Apply sigmoid and view as batch size
+        return x.sigmoid().view(x.shape[0])
 
 
 # Evaluation helper methods
-def get_predictions_array(y_true, model_output):
+def get_predictions_array(y_true: list[int], model_output: list[int]) -> list[tuple[int, int, float]]:
+    """Generate an array of predictions comparing the model output with true labels.
+
+    Args:
+        y_true (Tensor): true labels.
+        model_output (Tensor): output from the model.
+
+    Returns:
+        list: a list of tuples containing the true label, predicted label, and model logit for each sample.
+
+    """
     predictions_array = []
     for j, logit in enumerate(model_output.to_numpy()):
         true_label = y_true[j]
@@ -123,7 +166,16 @@ def get_predictions_array(y_true, model_output):
     return predictions_array
 
 
-def get_accuracy(predictions_array):
+def get_accuracy(predictions_array: list[tuple[int, int, float]]) -> float:
+    """Calculate the accuracy based on predictions.
+
+    Args:
+        predictions_array (list): list of tuples containing true and predicted labels.
+
+    Returns:
+        float: accuracy of predictions.
+
+    """
     correct = 0
     for y_true, y_pred, logit in predictions_array:
         if y_true == y_pred:
@@ -135,54 +187,68 @@ best_val = 0.0
 
 
 def default_log_fn(
-    epoch,
-    train_loss,
-    losses,
-    train_predictions,
-    train_accuracy,
-    validation_predictions,
-    validation_accuracy,
-    log_file="sentiment.txt",
-):
+    epoch: int,
+    train_loss: float,
+    losses: list[float],
+    train_predictions: list[tuple[int, int, float]],
+    train_accuracy: list[float],
+    validation_predictions: list[tuple[int, int, float]],
+    validation_accuracy: list[float]
+) -> None:
+    """Default logging function to print training and validation results.
+
+    Args:
+        epoch (int): current epoch number.
+        train_loss (float): accumulated loss of the current epoch.
+        losses (list): list of accumulated losses over epochs.
+        train_predictions (list): list of training predictions for the current epoch.
+        train_accuracy (list): list of training accuracies over epochs.
+        validation_predictions (list): list of validation predictions for the current epoch.
+        validation_accuracy (list): list of validation accuracies over epochs.
+
+    """
     global best_val
     best_val = (
         best_val if best_val > validation_accuracy[-1] else validation_accuracy[-1]
     )
-
-    # Construct log message
-    log_message = (
-        f"Epoch {epoch}, loss {train_loss}, "
-        f"train accuracy: {train_accuracy[-1]:.2%}, "
-    )
+    print(f"Epoch {epoch}, loss {train_loss}, train accuracy: {train_accuracy[-1]:.2%}")
     if len(validation_predictions) > 0:
-        log_message += (
-            f"Validation accuracy: {validation_accuracy[-1]:.2%}, "
-            f"Best Valid accuracy: {best_val:.2%}\n"
-        )
-    else:
-        log_message += "\n"
-
-    # Print the message to the console
-    print(log_message.strip())
-
-    # Append the message to the log file
-    with open(log_file, "a") as f:
-        f.write(log_message)
+        print(f"Validation accuracy: {validation_accuracy[-1]:.2%}")
+        print(f"Best Valid accuracy: {best_val:.2%}")
 
 
 class SentenceSentimentTrain:
-    def __init__(self, model):
+    """Training class for sentence sentiment analysis using a defined model."""
+
+    def __init__(self, model: minitorch.Module) -> None:
+        """Initialize with a model.
+
+        Args:
+            model (minitorch.Module): the model to train.
+
+        """
         self.model = model
 
     def train(
         self,
-        data_train,
-        learning_rate,
-        batch_size=10,
-        max_epochs=500,
-        data_val=None,
-        log_fn=default_log_fn,
-    ):
+        data_train: tuple[list[list[list[float]]], list[int]],
+        learning_rate: float,
+        batch_size: int = 10,
+        max_epochs: int = 500,
+        data_val: tuple[list[list[list[float]]], list[int]] = None,
+        log_fn: callable = default_log_fn
+) -> None:
+        """Train the model using the provided training data.
+
+        Args:
+            data_train (tuple): tuple containing training features and labels.
+            learning_rate (float): learning rate for the optimizer.
+            batch_size (int): size of batches for training.
+            max_epochs (int): maximum number of epochs to train.
+            data_val (tuple, optional): tuple containing validation features and labels.
+            log_fn (callable, optional): function to log training progress.
+
+        """
         model = self.model
         (X_train, y_train) = data_train
         n_training_samples = len(X_train)
@@ -253,8 +319,27 @@ class SentenceSentimentTrain:
 
 
 def encode_sentences(
-    dataset, N, max_sentence_len, embeddings_lookup, unk_embedding, unks
-):
+    dataset: dict,
+    N: int,
+    max_sentence_len: int,
+    embeddings_lookup: embeddings.GloveEmbedding,
+    unk_embedding: list[float],
+    unks: set[str]
+) -> tuple[list[list[list[float]]], list[int]]:
+    """Encode sentences into embeddings with padding.
+
+    Args:
+        dataset (Dataset): dataset containing sentences and labels.
+        N (int): number of samples to encode.
+        max_sentence_len (int): maximum length for padding sentences.
+        embeddings_lookup (Embeddings): lookup object to get embeddings.
+        unk_embedding (list): embedding for unknown words.
+        unks (set): set to collect unknown words.
+
+    Returns:
+        tuple: tuple containing encoded sentences and labels.
+
+    """
     Xs = []
     ys = []
     for sentence in dataset["sentence"][:N]:
@@ -276,7 +361,24 @@ def encode_sentences(
     return Xs, ys
 
 
-def encode_sentiment_data(dataset, pretrained_embeddings, N_train, N_val=0):
+def encode_sentiment_data(
+    dataset: dict,
+    pretrained_embeddings: embeddings.GloveEmbedding,
+    N_train: int,
+    N_val: int = 0
+) -> tuple[tuple[list[list[list[float]]], list[int]], tuple[list[list[list[float]]], list[int]]]:
+    """Prepare and encode data for sentiment analysis training and validation.
+
+    Args:
+        dataset (dict): dataset dictionary containing training and validation splits.
+        pretrained_embeddings (Embeddings): pre-trained embeddings for encoding.
+        N_train (int): number of training samples to encode.
+        N_val (int): number of validation samples to encode (default is 0).
+
+    Returns:
+        tuple: tuple containing encoded training data and validation data.
+
+    """
     #  Determine max sentence length for padding
     max_sentence_len = 0
     for sentence in dataset["train"]["sentence"] + dataset["validation"]["sentence"]:
@@ -310,7 +412,7 @@ def encode_sentiment_data(dataset, pretrained_embeddings, N_train, N_val=0):
 if __name__ == "__main__":
     train_size = 450
     validation_size = 100
-    learning_rate = 0.01
+    learning_rate = 0.05 #originally 0.01
     max_epochs = 250
 
     (X_train, y_train), (X_val, y_val) = encode_sentiment_data(

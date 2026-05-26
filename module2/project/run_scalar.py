@@ -12,17 +12,20 @@ class Network(minitorch.Module):
     def __init__(self, hidden_layers):
         super().__init__()
         # TODO: Implement for Task 1.5.
-        self.layer1 = Linear(2, hidden_layers)
-        self.layer2 = Linear(hidden_layers, hidden_layers)
-        self.layer3 = Linear(hidden_layers, hidden_layers)
-        self.layer4 = Linear(hidden_layers, 1)
+        self.layer1 = Linear(
+            2, hidden_layers
+        )  # takes 2 input features (input dimension of 2) and produces an output of size hidden_layers
+        self.layer2 = Linear(
+            hidden_layers, hidden_layers
+        )  # Hidden layer to next hidden layer
+        self.layer3 = Linear(
+            hidden_layers, 1
+        )  # reduces the output from the hidden layer to 1 output
 
     def forward(self, x):
-        x1 = [h.relu() for h in self.layer1.forward(x)]
-        x2 = [h.relu() for h in self.layer2.forward(x1)]
-        x3 = [h.relu() for h in self.layer3.forward(x2)]
-
-        return self.layer4.forward(x3)[0].sigmoid()
+        middle = [h.relu() for h in self.layer1.forward(x)]
+        end = [h.relu() for h in self.layer2.forward(middle)]
+        return self.layer3.forward(end)[0].sigmoid()
 
 
 class Linear(minitorch.Module):
@@ -45,17 +48,16 @@ class Linear(minitorch.Module):
                 )
             )
 
-        #print("weights", self.weights)
-        #print("bias", self.bias)
-
     def forward(self, inputs):
         # TODO: Implement for Task 1.5.
-        x = inputs
-        out = [n.value for n in self.bias]
-        for i in range(len(self.weights)):
-            for j in range(len(self.weights[i])):
-                out[j] += x[i] * self.weights[i][j].value
-        #print(out)
+        out = []
+        for j in range(len(self.bias)):
+            # Compute the linear combination of inputs and weights, then add bias
+            weighted_sum = sum(
+                [inputs[i] * self.weights[i][j].value for i in range(len(inputs))]
+            )
+            # Add bias
+            out.append(weighted_sum + self.bias[j].value)
         return out
 
 
@@ -91,9 +93,7 @@ class ScalarTrain:
                 x_1, x_2 = data.X[i]
                 y = data.y[i]
                 x_1 = minitorch.Scalar(x_1)
-                #print(x_1)
                 x_2 = minitorch.Scalar(x_2)
-                #print(x_2)
                 out = self.model.forward((x_1, x_2))
 
                 if y == 1:
@@ -118,7 +118,7 @@ class ScalarTrain:
 
 if __name__ == "__main__":
     PTS = 50
-    HIDDEN = 8
+    HIDDEN = 2
     RATE = 0.5
     data = minitorch.datasets["Simple"](PTS)
     ScalarTrain(HIDDEN).train(data, RATE)

@@ -27,7 +27,7 @@ class SGD(Optimizer):
                     p.value.grad = None
 
     def step(self) -> None:
-        """Perform a single optimization step."""
+        """Update parameters based on gradients and learning rate."""
         for p in self.parameters:
             if p.value is None:
                 continue

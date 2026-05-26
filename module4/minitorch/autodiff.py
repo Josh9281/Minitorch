@@ -25,43 +25,55 @@ def central_difference(f: Any, *vals: Any, arg: int = 0, epsilon: float = 1e-6) 
         An approximation of $f'_i(x_0, \ldots, x_{n-1})$
 
     """
-    # TODO: Implement for Task 1.1.
-    vals1 = [v for v in vals]
-    vals2 = [v for v in vals]
-    vals1[arg] = vals1[arg] + epsilon
-    vals2[arg] = vals2[arg] + epsilon
-    delta = f(*vals1) - f(*vals2)
-    return delta / (2 * epsilon)
+    # Create a mutable list from vals
+    val_list = list(vals)
+    original_value = val_list[arg]
+
+    # Forward value
+    val_list[arg] = original_value + epsilon
+    f_plus = f(*val_list)
+
+    # Backward value
+    val_list[arg] = original_value - epsilon
+    f_minus = f(*val_list)
+
+    # Restore original value
+    val_list[arg] = original_value
+
+    # Central difference formula
+    return (f_plus - f_minus) / (2 * epsilon)
 
 
 variable_count = 1
 
 
 class Variable(Protocol):
+    """Protocol for variables in the computational graph."""
+
     def accumulate_derivative(self, x: Any) -> None:
-        """Accumulate the derivative for the variable."""
+        """Accumulate the derivative value."""
         ...
 
     @property
     def unique_id(self) -> int:
-        """Return the unique identifier for the variable."""
+        """Return the unique ID of the variable."""
         ...
 
     def is_leaf(self) -> bool:
-        """Return True if the variable is a leaf."""
+        """Check if the variable is a leaf node in the computation graph."""
         ...
 
     def is_constant(self) -> bool:
-        """Return True if the variable is a constant."""
+        """Check if the variable is a constant."""
         ...
 
     @property
     def parents(self) -> Iterable["Variable"]:
-        """Return the parent variables of this variable."""
+        """Return the parent variables of the current variable."""
         ...
 
     def chain_rule(self, d_output: Any) -> Iterable[Tuple[Variable, Any]]:
-        """Apply the chain rule to compute derivatives."""
+        """Perform the chain rule for backpropagation."""
         ...
 
 
@@ -77,7 +89,20 @@ def topological_sort(variable: Variable) -> Iterable[Variable]:
         Non-constant Variables in topological order starting from the right.
 
     """
-    # TODO: Implement for Task 1.4.
+    # visited = set()  # To keep track of visited nodes
+    # order = []  # To store the topological order
+
+    # def visit(v: Variable) -> None:
+    #     """Visit the node and its parents."""
+    #     if v not in visited:
+    #         visited.add(v)
+    #         for parent in v.parents:
+    #             visit(parent)
+    #         order.append(v)
+
+    # visit(variable)  # Start the visit from the right-most variable
+    # return reversed(order)  # Return in topological order
+
     order: List[Variable] = []
     seen = set()
 
@@ -96,20 +121,25 @@ def topological_sort(variable: Variable) -> Iterable[Variable]:
 
 
 def backpropagate(variable: Variable, deriv: Any) -> None:
-    """Runs backpropagation on the computation graph in order to
-    compute derivatives for the leave nodes.
+    """Runs backpropagation on the computation graph to compute derivatives for the leaf nodes.
 
     Args:
     ----
-        variable: The right-most variable
-        deriv  : Its derivative that we want to propagate backward to the leaves.
+        variable: The right-most variable in the computation graph.
+        deriv: The derivative of the output with respect to this variable that we want to propagate backward to the leaves.
 
     """
-    # TODO: Implement for Task 1.4.
+    # # Accumulate the derivative only for leaf nodes
+    # if variable.is_leaf():
+    #     variable.accumulate_derivative(deriv)
+    # else:
+    #     # If it's not a leaf, propagate the derivative using the chain rule
+    #     for parent, grad in variable.chain_rule(deriv):
+    #         backpropagate(parent, grad)
+
     queue = topological_sort(variable)
     derivatives = {}
     derivatives[variable.unique_id] = deriv
-
     for var in queue:
         deriv = derivatives[var.unique_id]
         if var.is_leaf():
@@ -137,5 +167,5 @@ class Context:
 
     @property
     def saved_tensors(self) -> Tuple[Any, ...]:
-        """Return the saved tensors for backpropagation."""
+        """Return the saved tensors."""
         return self.saved_values

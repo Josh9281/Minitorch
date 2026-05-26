@@ -1,7 +1,5 @@
 """Collection of the core mathematical operators used throughout the code base."""
 
-import math
-from typing import Callable, Any
 
 # ## Task 0.1
 
@@ -31,94 +29,94 @@ from typing import Callable, Any
 # For is_close:
 # $f(x) = |x - y| < 1e-2$
 
-
 # TODO: Implement for Task 0.1.
+import math
+from typing import Union, Callable, Iterable
+
+Number = Union[int, float]
 
 
-def mul(x: float, y: float) -> float:
-    """Multiply two floats."""
+def mul(x: Number, y: Number) -> Number:
+    """Multiply two numbers."""
     return x * y
 
 
-def id(x: float) -> float:
-    """Return the input value unchanged."""
+def id(x: Number) -> Number:
+    """Return the input number (identity function)."""
     return x
 
 
-def add(x: float, y: float) -> float:
-    """Add two floats."""
+def add(x: Number, y: Number) -> Number:
+    """Add two numbers."""
     return x + y
 
 
-def neg(x: float) -> float:
-    """Negate a float."""
+def neg(x: Number) -> Number:
+    """Negate a number."""
     return -x
 
 
-def lt(x: float, y: float) -> float:
-    """Compare two floats."""
-    return 1.0 if x < y else 0.0
+def lt(x: Number, y: Number) -> bool:
+    """Check if x is less than y."""
+    return x < y
 
 
-def eq(x: float, y: float) -> float:
-    """Compare two floats."""
-    return 1.0 if x == y else 0.0
+def eq(x: Number, y: Number) -> bool:
+    """Check if x is equal to y."""
+    return x == y
 
 
-def max(x: float, y: float) -> float:
-    """Return the maximum of two floats."""
+def max(x: Number, y: Number) -> Number:
+    """Return the maximum of two numbers."""
     return x if x > y else y
 
 
-def is_close(x: float, y: float) -> float:
-    """Check if two floats are close."""
-    return (x - y < 1e-2) and (y - x < 1e-2)
+def is_close(x: Number, y: Number) -> bool:
+    """Check if two numbers are close (within 1e-2)."""
+    return abs(x - y) < 1e-2
 
 
-def sigmoid(x: float) -> float:
-    """Calculate the sigmoid of a float."""
+def sigmoid(x: Number) -> float:
+    """Compute the sigmoid function."""
     if x >= 0:
         return 1.0 / (1.0 + math.exp(-x))
     else:
         return math.exp(x) / (1.0 + math.exp(x))
 
 
-def relu(x: float) -> float:
-    """Calculate the ReLU of a float."""
-    return x if x >= 0 else 0.0
+def relu(x: Number) -> Number:
+    """Compute the ReLU (Rectified Linear Unit) function."""
+    return max(0, x)
 
 
-EPS = 1e-6
+def log(x: Number) -> float:
+    """Compute the natural logarithm of a number."""
+    return math.log(x)
 
 
-def log(x: float) -> float:
-    """Calculate the natural logarithm of a float."""
-    return math.log(x + EPS)
-
-
-def exp(x: float) -> float:
-    """Calculate the exponential of a float."""
+def exp(x: Number) -> float:
+    """Compute the exponential of a number."""
     return math.exp(x)
 
 
-def log_back(x: float, g: float) -> float:
-    """Calculate the derivative of the logarithm function."""
-    return g / (x + EPS)
+def log_back(x: Number, d: Number) -> float:
+    """Compute the gradient of the natural logarithm."""
+    return d / x
 
 
-def inv(x: float) -> float:
-    """Calculate the inverse of a float."""
+def inv(x: Number) -> float:
+    """Compute the inverse (reciprocal) of a number."""
     return 1.0 / x
 
 
-def inv_back(x: float, g: float) -> float:
-    """Calculate the derivative of the inverse function."""
-    return -(1.0 / x**2) * g
+def inv_back(x: Number, d: Number) -> float:
+    """Compute the gradient of the inverse function."""
+    return -d / (x * x)
 
 
-def relu_back(x: float, g: float) -> float:
-    """Calculate the derivative of the ReLU function."""
-    return g if x > 0 else 0.0
+def relu_back(x: float, d: float) -> float:
+    """Compute the gradient of the ReLU function."""
+    return d if x > 0 else 0
 
 
 # ## Task 0.3
@@ -138,52 +136,73 @@ def relu_back(x: float, g: float) -> float:
 
 
 # TODO: Implement for Task 0.3.
+# ## Task 0.3
+
+# Small practice library of elementary higher-order functions.
 
 
-def map(f: Callable[[Any], Any], lst: list) -> list:
-    """Apply a function to each element of a list."""
-
-    def _map(ls: list[float]) -> list[float]:
-        ret = []
-        for x in ls:
-            ret.append(f(x))
-        return ret
-
-    return _map(lst)
+# Implement the following core functions
 
 
-def zipWith(f: Callable[[Any, Any], Any], lst1: list, lst2: list) -> list:
-    """Apply a function to corresponding elements of two lists."""
-    return [f(x, y) for x, y in zip(lst1, lst2)]
+def map(fn: Callable[[float], float]) -> Callable[[Iterable[float]], Iterable[float]]:
+    """Apply a function to each element in a list and return the results."""
+
+    def _map(lst: Iterable[float]) -> Iterable[float]:
+        res = []
+        for x in lst:
+            res.append(fn(x))
+        return res
+
+    return _map
 
 
-def reduce(f: Callable[[Any, Any], Any], lst: list, initial: Any) -> Any:
-    """Reduce a list to a single value using a function and an initial value."""
+def zipWith(
+    fn: Callable[[float, float], float],
+) -> Callable[[Iterable[float], Iterable[float]], Iterable[float]]:
+    """Apply a function to pairs of elements from two lists and return the results."""
 
-    def _reduce(ls: list[float]) -> float:
-        result = initial
-        for x in ls:
-            result = f(result, x)
-        return result
+    def _zipWith(lst1: Iterable[float], lst2: Iterable[float]) -> Iterable[float]:
+        res = []
+        for x, y in zip(lst1, lst2):
+            res.append(fn(x, y))
+        return res
 
-    return _reduce(lst)
-
-
-def negList(lst: list[float]) -> list[float]:
-    """Use map and neg to negate each element of a list."""
-    return map(neg, lst)
+    return _zipWith
 
 
-def addLists(lst1: list[float], lst2: list[float]) -> list[float]:
-    """Add corresponding elements from two lists."""
-    return zipWith(add, lst1, lst2)
+def reduce(
+    fn: Callable[[float, float], float], start: float
+) -> Callable[[Iterable[float]], float]:
+    """Reduce a list to a single value by applying a function cumulatively."""
+
+    def _reduce(lst: Iterable[float]) -> float:
+        val = start  # Explicit type hint for val
+        for item in lst:
+            val = fn(val, item)
+        return val
+
+    return _reduce
 
 
-def sum(lst: list[float]) -> float:
-    """Sum a list."""
-    return reduce(add, lst, 0.0)
+# Use these to implement
+def negList(lst: Iterable[float]) -> Iterable[float]:
+    """Negate all numbers in the given list."""
+    return map(neg)(lst)
 
 
-def prod(lst: list[float]) -> float:
-    """Take the product of a list."""
-    return reduce(mul, lst, 1.0)
+def addLists(lst1: Iterable[float], lst2: Iterable[float]) -> Iterable[float]:
+    """Add corresponding elements of two lists."""
+    return zipWith(add)(lst1, lst2)
+
+
+def sum(lst: Iterable[float]) -> float:
+    """Calculate the sum of all numbers in the given list."""
+    return reduce(add, 0.0)(lst)
+
+
+def prod(lst: Iterable[float]) -> float:
+    """Calculate the product of all numbers in the given list."""
+    return reduce(mul, 1.0)(lst)
+
+
+# TODO: Implement for Task 0.3.

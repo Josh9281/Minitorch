@@ -1,4 +1,9 @@
-"""The minitorch package provides various tensor operations, autodiff capabilities, and optimizers for machine learning tasks."""
+"""minitorch: A lightweight tensor library for high-performance computing.
+
+This package provides tensor operations and functionalities similar to NumPy,
+optimized for performance and ease of use in machine learning and scientific
+computing applications.
+"""
 
 from .testing import MathTest, MathTestVariable  # type: ignore # noqa: F401,F403
 from .fast_ops import *  # noqa: F401,F403
